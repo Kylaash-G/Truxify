@@ -1,4 +1,5 @@
 {
+  "name": "truxify-workspace",
   "type": "module",
   "private": true,
   "workspaces": [
@@ -36,7 +37,10 @@
   },
   "scripts": {
     "prepare": "husky || echo 'husky unavailable — skipping git hook installation'",
-    "unassign:issues": "node .github/scripts/issue-unassigner.js"
+    "unassign:issues": "node .github/scripts/issue-unassigner.js",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
   },
   "lint-staged": {
     "backend/**/*.js": [
