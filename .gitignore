@@ -18,10 +18,8 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line is
-# commented out by default.
-#.vscode/
+# VS Code
+.vscode/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -35,8 +33,6 @@ migrate_working_dir/
 
 # Symbolication related
 app.*.symbols
-
-# Obfuscation related
 app.*.map.json
 
 # Android Studio will place build artifacts here
@@ -44,38 +40,36 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Additional patterns
+# Node & Python
 **/pubspec.lock
 **/node_modules/
 **/__pycache__/
 **/*.pyc
 **/.env
+**/.env.*.local
+*.pem
+*.sqlite
+*.sqlite-journal
+
+# Apps
 apps/customer/dart_define.json
 apps/driver/dart_define.json
-*.log
 
-# Vitest coverage reports
+# Testing & Coverage
 coverage/
+.nyc_output/
+cypress/videos/
+cypress/screenshots/
 backend/api/coverage/
 *.lcov
 
-__pycache__/
-*.pyc
+# ML & DBs
 venv/
-# SQLite files the ML service creates at startup (sqlite:///./traffic.db,
-# sqlite:///./ab_testing.db in backend/ml/routes). Local runs write to them.
 *.db
-
-# Local Docker Compose overrides — may contain real credentials
 docker-compose.override.yml
 
-# Google Services config (contains API keys/secrets)
+# Secrets
 **/google-services.json
-
-# Dart define env files (contain API keys)
 dart_defines/*.env
 !dart_defines/*.env.example
 **/.truxify-vc-status-index.json
-
-*.sqlite
-*.sqlite-journal

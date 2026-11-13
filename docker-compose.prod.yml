@@ -29,21 +29,14 @@ services:
       - .env
     environment:
       NODE_ENV: production
-      # Override local-dev URLs with production values
       MONGODB_URI: ${MONGODB_URI:?MONGODB_URI is required}
       REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
-      # Backend JWT signing key. Required: the API refuses to boot without it,
-      # so there is no chance of falling back to a publicly known default.
-      # Generate with: openssl rand -hex 48
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       ML_API_KEY: ${ML_API_KEY:?ML_API_KEY is required}
       ML_ENGINE_URL: http://ml-engine:8000
-      # API key auth for backend-to-backend endpoints (n8n workflows)
       VALID_API_KEYS: ${VALID_API_KEYS:?VALID_API_KEYS is required}
-      # Malware scanning
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
-    # Remove dev volumes — code is baked into the image
     volumes: []
     ports:
       - "${API_PORT:-5000}:5000"
@@ -55,10 +48,7 @@ services:
       redis:
         condition: service_healthy
       ml-engine:
-        condition: service_started
-      clamav:
         condition: service_healthy
-        required: false
     deploy:
       resources:
         limits:
@@ -75,11 +65,17 @@ services:
         max-file: "${LOG_MAX_FILE:-3}"
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/api/health/live || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   # ─── ML Engine ─────────────────────────────────────────────────────────────
-  # Security: NOT published on the host network — reachable only by the API
-  # service on the internal Docker network (`http://ml-engine:8000`). All routes
-  # require the shared X-API-Key, and interactive docs are disabled in production.
   ml-engine:
     build:
       context: ./backend/ml
@@ -92,8 +88,6 @@ services:
       ENVIRONMENT: production
       MODEL_STORAGE_DIR: /app/models_storage
     volumes:
-      # Remove dev code mount — code is baked into the production image
-      # Persist trained models across restarts — must match MODEL_STORAGE_DIR in base.py
       - ml_models_data:/app/models_storage
     deploy:
       resources:
@@ -111,6 +105,15 @@ services:
         max-file: "${LOG_MAX_FILE:-3}"
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ─── PostgreSQL / PostGIS (Primary DB) ─────────────────────────────────────
   db:
@@ -126,9 +129,6 @@ services:
       - "${DB_PORT:-127.0.0.1:5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Optional: mount init scripts
-      # - ./docs/supabase_setup.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      # Create the dedicated least-privilege n8n role/database (fresh volumes only).
       - ./automation/n8n/init/01-create-n8n-db.sh:/docker-entrypoint-initdb.d/01-create-n8n-db.sh:ro
     deploy:
       resources:
@@ -220,7 +220,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    # Production Redis config
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -235,10 +234,6 @@ services:
       --save 60 10000
 
   # ─── n8n Automation (Dispute Pipeline & ML Retraining) ────────────────────
-  # Security: NOT exposed on the host network — reachable only on the internal
-  # Docker network. User management is mandatory (owner setup required) and the
-  # service uses its own dedicated, least-privilege database instead of the
-  # application's `postgres` superuser-equivalent credentials.
   n8n:
     image: docker.n8n.io/n8nio/n8n:2.38.7
     container_name: truxify-n8n
@@ -249,10 +244,8 @@ services:
       N8N_PORT: 5678
       N8N_PROTOCOL: https
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY is required}
-      # Fail to start unless user management + owner provisioning is enabled.
       N8N_USER_MANAGEMENT_JWT_SECRET: ${N8N_USER_MANAGEMENT_JWT_SECRET:?N8N_USER_MANAGEMENT_JWT_SECRET is required}
       N8N_USER_MANAGEMENT_DISABLED: "false"
-      # Dedicated least-privilege database (never the app's `truxify` DB).
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: db
       DB_POSTGRESDB_PORT: 5432
@@ -263,9 +256,6 @@ services:
       EXECUTIONS_DATA_MAX_AGE: 336
       N8N_METRICS: "true"
       BACKEND_API_URL: ${BACKEND_API_URL:?BACKEND_API_URL is required}
-      # Operator mailbox for escrow freeze/release failures and arbitration
-      # escalation. Required: a stuck-escrow alert that reaches nobody is worse
-      # than a boot failure, so n8n refuses to start until this is set.
       ADMIN_ALERT_EMAIL: ${ADMIN_ALERT_EMAIL:?ADMIN_ALERT_EMAIL is required}
     volumes:
       - n8n_data:/home/node/.n8n
@@ -295,7 +285,7 @@ services:
       retries: 5
       start_period: 60s
 
-  # ─── ClamAV (malware scanning daemon) ────────────────────────────────────
+  # ─── ClamAV ────────────────────────────────────
   clamav:
     image: clamav/clamav:1.4
     container_name: truxify-clamav
@@ -324,9 +314,6 @@ services:
       retries: 5
       start_period: 120s
 
-# ============================================================================
-# Volumes
-# ============================================================================
 volumes:
   postgres_data:
     name: truxify_postgres_data
@@ -341,9 +328,6 @@ volumes:
   clamav_data:
     name: truxify_clamav_data
 
-# ============================================================================
-# Networks
-# ============================================================================
 networks:
   default:
     name: truxify_prod
